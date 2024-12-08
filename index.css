@@ -5,7 +5,7 @@
 }
 
 :root {
-  -ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 body,
@@ -31,17 +31,17 @@ html {
 
 [data-dom="list"] li {
   opacity: 0.1;
-  transition: opacity 1s var(-ease) 0s;
+  transition: opacity 1s var(--ease) 0s;
 }
 
 [data-dom="list"] li:hover {
   opacity: 0.4;
-  transition: opacity 1s var(-ease) 0s;
+  transition: opacity 1s var(--ease) 0s;
 }
 
 [data-dom="list"] .active,
 [data-dom="list"] .active:hover {
-  transition: opacity 1s var(-ease) 0s;
+  transition: opacity 1s var(--ease) 0s;
   opacity: 1;
   z-index: 20;
   position: relative;
