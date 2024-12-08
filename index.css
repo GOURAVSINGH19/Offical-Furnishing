@@ -13,23 +13,27 @@ html {
   width: 100%;
   height: 100vh;
   background-color: #111111;
+  scrollbar-width: none;
+  scroll-behavior: none;
 }
 
 #root {
   width: 100%;
   height: 100vh;
-  pointer-events: none;
+  pointer-events:none;
 }
 
 .webgl {
-  position: fixed;
+  position: relative;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
+  pointer-events:none;
 }
 
 [data-dom="list"] li {
+  cursor: pointer;
   opacity: 0.1;
   transition: opacity 1s var(--ease) 0s;
 }

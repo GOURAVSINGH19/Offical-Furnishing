@@ -5,7 +5,16 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import SplitType from "split-type";
+import { Group } from "three";
+import { animate } from "https://cdn.jsdelivr.net/npm/motion@11.11.13/+esm";
 gsap.registerPlugin(ScrollTrigger);
+
+// Post-Processing
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { NoiseShader } from "./shaders/noise-shader.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 // lenis
 const lenis = new Lenis();
@@ -24,6 +33,10 @@ const canvas = document.querySelector("canvas.webgl");
 // Scene
 const scene = new THREE.Scene();
 
+let currentEffect = 0;
+let aimEffect = 0;
+let timeoutEffect;
+
 /**
  * Textures
  */
@@ -31,35 +44,56 @@ const scene = new THREE.Scene();
 /**
  * Test mesh
  */
-
 const gltfLoader = new GLTFLoader();
-gltfLoader.load("/black_chair.glb", (gltf) => {
-  gltf.scene.traverse((child) => {
-    if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
-      child.rotation.z = 0.2;
-    }
-  });
+const loadedgroup = new Group();
+loadedgroup.position.y = -10;
 
-  scene.add(gltf.scene);
-});
+const scrollGroup = new Group();
+scrollGroup.add(loadedgroup);
+
+scene.add(scrollGroup);
+
+gltfLoader.load(
+  "/black_chair.glb",
+  (gltf) => {
+    gltf.scene.rotation.z = 0.2;
+    loadedgroup.add(gltf.scene);
+
+    gsap.to(loadedgroup.position, {
+      y: 0,
+      duration: 2,
+      delay: .1,
+      ease: "power3.out",
+    });
+  },
+  undefined, 
+  (error) => {
+    console.error("Error loading model:", error);
+  }
+);
 
 // light
 
-const ambientLight = new THREE.AmbientLight("lightblue");
-ambientLight.intensity = 4;
-scene.add(ambientLight);
+const ambience = new THREE.AmbientLight(0x404040);
+scene.add(ambience);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-directionalLight.position.set(0.5, 7.5, 2.5).normalize();
+const keyLight = new THREE.DirectionalLight(0xffffff, 1);
+keyLight.position.set(-1, 1, 3);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+fillLight.position.set(1, 1, 3);
+scene.add(fillLight);
+
+const backLight = new THREE.DirectionalLight(0xffffff, 1);
+backLight.position.set(-1, 3, -1);
+scene.add(backLight);
 
 let texts = [...document.querySelectorAll("[data-dom] li")];
-console.log(texts);
 texts.forEach((text) => {
   text.style.position = "relative";
+  texts[0].classList.add("active");
   text.addEventListener("click", () => {
-    
     texts.forEach((item) => {
       item.classList.remove("active");
       gsap.to(item, {
@@ -72,27 +106,11 @@ texts.forEach((text) => {
   });
 });
 
-/**
- * Sizes
- */
+// sizes
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
 };
-
-window.addEventListener("resize", () => {
-  // Update sizes
-  sizes.width = window.innerWidth;
-  sizes.height = window.innerHeight;
-
-  // Update camera
-  camera.aspect = sizes.width / sizes.height;
-  camera.updateProjectionMatrix();
-
-  // Update renderer
-  renderer.setSize(sizes.width, sizes.height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-});
 
 /**
  * Camera
@@ -109,10 +127,10 @@ scene.add(camera);
 
 // Controls
 const controls = new OrbitControls(camera, canvas);
-controls.enableDamping = false;
-controls.autoRotate = true;
 controls.enableZoom = false;
-controls.rotateSpeed = 0.6;
+controls.enablePan = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 2;
 
 /**
  * Renderer
@@ -125,22 +143,44 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+// post processing
+
+const composer = new EffectComposer(renderer);
+
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const clock = new THREE.Clock();
+
+const Shader = new ShaderPass(NoiseShader);
+Shader.uniforms.time.value = clock.getElapsedTime();
+Shader.uniforms.effect.value = currentEffect;
+Shader.uniforms.aspectRatio.value = window.innerWidth / window.innerHeight;
+composer.addPass(Shader);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
+
 /**
  * Animate
  */
-const clock = new THREE.Clock();
 
 const tick = () => {
   const elapsedTime = clock.getElapsedTime();
 
+  scrollGroup.rotation.set(0, window.scrollY * 0.001, 0);
+  currentEffect += (aimEffect - currentEffect) * 0.05;
+
+  Shader.uniforms.time.value = elapsedTime;
+  Shader.uniforms.effect.value = currentEffect;
+
   // Update controls
   controls.update();
 
-  // Render
-  renderer.render(scene, camera);
-
-  // Call tick again on the next frame
   window.requestAnimationFrame(tick);
+  // Render
+  composer.render();
+  // Call tick again on the next frame
 };
 
 tick();
@@ -256,3 +296,34 @@ ScrollTrigger.create({
 
   toggleActions: "play reverse play reverse",
 });
+
+const scroll = () => {
+  clearTimeout(timeoutEffect);
+
+  aimEffect = 1;
+
+  timeoutEffect = setTimeout(() => {
+    aimEffect = 0;
+  }, 100);
+};
+/**
+ * Sizes
+ */
+
+window.addEventListener("resize", () => {
+  // Update sizes
+  sizes.width = window.innerWidth;
+  sizes.height = window.innerHeight;
+
+  // Update camera
+  camera.aspect = sizes.width / sizes.height;
+  camera.updateProjectionMatrix();
+
+  Shader.uniforms.aspectRatio.value = window.innerWidth / window.innerHeight;
+
+  // Update renderer
+  renderer.setSize(sizes.width, sizes.height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
+
+window.addEventListener("scroll", scroll);
